@@ -25,6 +25,9 @@ fn main() {
         if map.flags == "rw-p" {
             copy_map(&map, &source, PROT_READ | PROT_WRITE);
         }
+        if map.flags == "r--p" {
+            copy_map(&map, &source, PROT_READ | PROT_WRITE);
+        }
         if map.flags == "r-xp" {
             copy_map(&map, &source, PROT_READ | PROT_WRITE | PROT_EXEC);
         }
@@ -32,13 +35,17 @@ fn main() {
 
     let map = get_map(&maps, "bin/ruby", "r-xp").unwrap();
     let file = open_elf_file(pid, &map).unwrap();
+
+    let rb_get_argv_addr = get_symbol_addr(&map, &file, "rb_get_argv").unwrap();
+    let f = unsafe {std::mem::transmute::<u64, extern "C" fn () -> u64>(rb_get_argv_addr as u64) };
+    println!("it worked!!!! {:?}", f());
+
     let rb_mod_name_addr = get_symbol_addr(&map, &file, "rb_mod_name").unwrap();
     println!("mod name addr {:x}", rb_mod_name_addr);
-
+    
     if args.len() > 2 {
         let value: u64 = args[2].parse().unwrap();
         println!("{:x}", value);
-        std::thread::sleep(std::time::Duration::from_millis(100000));
         unsafe {
             let f = std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64);
             let out = f(value);
@@ -75,14 +82,23 @@ fn get_map(maps: &Vec<MapRange>, contains: &str, flags: &str) -> Option<MapRange
 fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) {
     let start = map.range_start;
     let length = map.range_end - map.range_start;
-    println!("trying: {:?}", map);
+    println!("trying:  {:x} -> {:x} {:?}", map.range_start, map.range_end, map);
     unsafe {
         let vec = copy_address(start, length, source);
         if !vec.is_ok() {
             println!("...failed");
+            return;
         }
+        let vec = vec.unwrap();
         let ptr = mmap(start as * mut c_void, length, perms, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-        std::slice::from_raw_parts_mut(start as * mut u8, length).copy_from_slice(&vec.unwrap());
+        if ptr == MAP_FAILED {
+            println!("...failed");
+            return;
+        }
+        println!("{:?}", &vec[0..10]);
+        let mut slice = std::slice::from_raw_parts_mut(start as * mut u8, length);
+        slice.copy_from_slice(&vec);
+        println!("{:?} {:x}", slice[0], slice.as_ptr() as u64);
         if perms & PROT_EXEC != 0 {
             libc::mprotect(start as *mut c_void, length, PROT_READ | PROT_EXEC);
         }
