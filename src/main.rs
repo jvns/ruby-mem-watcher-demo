@@ -32,13 +32,17 @@ fn main() {
 
     let map = get_map(&maps, "bin/ruby", "r-xp").unwrap();
     let file = open_elf_file(pid, &map).unwrap();
-    let addr = get_symbol_addr(&map, &file, "rb_mod_name").unwrap();
+    let rb_mod_name_addr = get_symbol_addr(&map, &file, "rb_mod_name").unwrap();
+    println!("mod name addr {:x}", rb_mod_name_addr);
 
-    let f = std::mem::transmute::<u64, extern "C" fn (u64) -> u64>;
     if args.len() > 2 {
         let value: u64 = args[2].parse().unwrap();
+        println!("{:x}", value);
+        std::thread::sleep(std::time::Duration::from_millis(100000));
         unsafe {
-            println!("{:?}", f(value));
+            let f = std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64);
+            let out = f(value);
+            println!("{}, {:?} {:x}", out as usize, out, value);
         }
     } else {
         println!("usage: ruby-fork-test PID value-to-get");
