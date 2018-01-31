@@ -48,4 +48,3 @@ while True:
     top = top[:10]
     for (count, ptr) in top:
         print("%20s | %s" % (ptr, count))
-    counts.clear()

@@ -36,14 +36,16 @@ fn main() {
     let map = get_map(&maps, "bin/ruby", "r-xp").unwrap();
     let file = open_elf_file(pid, &map).unwrap();
 
-    let rb_mod_name_addr = get_symbol_addr(&map, &file, "rb_mod_name").unwrap();
+    let rb_mod_name_addr = get_symbol_addr(&map, &file, "rb_class2name").unwrap();
     
     if args.len() > 2 {
         let value: u64 = args[2].parse().unwrap();
         unsafe {
             let f = std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64);
             let out = f(value);
-            println!("{:x}", out as usize);
+            let mut s = std::slice::from_raw_parts_mut(out as * mut u8, 20);
+            let name = std::string::String::from_utf8_lossy(s);
+            println!("{}", name);
         }
     } else {
         println!("usage: ruby-fork-test PID value-to-get");
@@ -73,30 +75,25 @@ fn get_map(maps: &Vec<MapRange>, contains: &str, flags: &str) -> Option<MapRange
     .map(|x| x.clone())
 }
 
-fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) {
+fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) -> Result<(), Error)> {
     let start = map.range_start;
     let length = map.range_end - map.range_start;
-    println!("trying:  {:x} -> {:x} {:?}", map.range_start, map.range_end, map);
     unsafe {
         let vec = copy_address(start, length, source);
         if !vec.is_ok() {
-            println!("...failed");
-            return;
+            return Err(format_err!("oh no"));
         }
         let vec = vec.unwrap();
         let ptr = mmap(start as * mut c_void, length, perms, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
         if ptr == MAP_FAILED {
-            println!("...failed");
-            return;
+            return Err(format_err!("oh no"));
         }
-        println!("{:?}", &vec[0..10]);
         let mut slice = std::slice::from_raw_parts_mut(start as * mut u8, length);
         slice.copy_from_slice(&vec);
-        println!("{:?} {:x}", slice[0], slice.as_ptr() as u64);
         if perms & PROT_EXEC != 0 {
             libc::mprotect(start as *mut c_void, length, PROT_READ | PROT_EXEC);
         }
-        println!("...success");
+        Ok(())
     }
 }
 
