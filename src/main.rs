@@ -13,15 +13,15 @@ fn main() {
     let maps = get_proc_maps(pid).unwrap();
     for map in maps {
         if map.flags == "rw-p" {
-            if map.pathname.as_ref().is_some() && map.pathname.as_ref().unwrap().contains(".so") {
-                continue;
-            }
-            copy_map(&map, &source);
+            copy_map(&map, &source, PROT_READ | PROT_WRITE);
+        }
+        if map.flags == "r-xp" {
+            copy_map(&map, &source, PROT_READ | PROT_WRITE | PROT_EXEC);
         }
     }
 }
 
-fn copy_map(map: &MapRange, source: &ProcessHandle) {
+fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) {
     let start = map.range_start;
     let length = map.range_end - map.range_start;
     unsafe {
@@ -29,8 +29,9 @@ fn copy_map(map: &MapRange, source: &ProcessHandle) {
         if !vec.is_ok() {
             println!("failed: {:?}", map);
         }
-        let ptr = mmap(start as * mut c_void, length, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+        let ptr = mmap(start as * mut c_void, length, perms, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
         std::slice::from_raw_parts_mut(start as * mut u8, length).copy_from_slice(&vec.unwrap());
+        println!("success: {:?}", map);
     }
 }
 
