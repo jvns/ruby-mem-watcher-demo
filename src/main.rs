@@ -33,7 +33,16 @@ fn main() {
     let map = get_map(&maps, "bin/ruby", "r-xp").unwrap();
     let file = open_elf_file(pid, &map).unwrap();
     let addr = get_symbol_addr(&map, &file, "rb_mod_name").unwrap();
-    println!("{:?}", addr);
+
+    let f = std::mem::transmute::<u64, extern "C" fn (u64) -> u64>;
+    if args.len() > 2 {
+        let value: u64 = args[2].parse().unwrap();
+        unsafe {
+            println!("{:?}", f(value));
+        }
+    } else {
+        println!("usage: ruby-fork-test PID value-to-get");
+    }
 }
 
 fn open_elf_file(pid: pid_t, map: &MapRange) -> Result<elf::File, Error> {
