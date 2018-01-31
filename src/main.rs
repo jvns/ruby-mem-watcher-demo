@@ -23,13 +23,13 @@ fn main() {
             continue;
         }
         if map.flags == "rw-p" {
-            copy_map(&map, &source, PROT_READ | PROT_WRITE);
+            copy_map(&map, &source, PROT_READ | PROT_WRITE).unwrap();
         }
         if map.flags == "r--p" {
-            copy_map(&map, &source, PROT_READ | PROT_WRITE);
+            copy_map(&map, &source, PROT_READ | PROT_WRITE).unwrap();
         }
         if map.flags == "r-xp" {
-            copy_map(&map, &source, PROT_READ | PROT_WRITE | PROT_EXEC);
+            copy_map(&map, &source, PROT_READ | PROT_WRITE | PROT_EXEC).unwrap();
         }
     }
 
@@ -43,7 +43,7 @@ fn main() {
         unsafe {
             let f = std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64);
             let out = f(value);
-            let mut s = std::slice::from_raw_parts_mut(out as * mut u8, 20);
+            let s = std::slice::from_raw_parts_mut(out as * mut u8, 20);
             let name = std::string::String::from_utf8_lossy(s);
             println!("{}", name);
         }
@@ -75,7 +75,7 @@ fn get_map(maps: &Vec<MapRange>, contains: &str, flags: &str) -> Option<MapRange
     .map(|x| x.clone())
 }
 
-fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) -> Result<(), Error)> {
+fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) -> Result<(), Error> {
     let start = map.range_start;
     let length = map.range_end - map.range_start;
     unsafe {
@@ -88,7 +88,7 @@ fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) -> Result<(), Er
         if ptr == MAP_FAILED {
             return Err(format_err!("oh no"));
         }
-        let mut slice = std::slice::from_raw_parts_mut(start as * mut u8, length);
+        let slice = std::slice::from_raw_parts_mut(start as * mut u8, length);
         slice.copy_from_slice(&vec);
         if perms & PROT_EXEC != 0 {
             libc::mprotect(start as *mut c_void, length, PROT_READ | PROT_EXEC);
