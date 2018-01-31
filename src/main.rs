@@ -19,7 +19,7 @@ fn main() {
     let maps = get_proc_maps(pid).unwrap();
     for map in &maps {
         let path = map.pathname.as_ref();
-        if path.is_some() && path.unwrap().contains("syscall") {
+        if path.is_some() && (path.unwrap().contains("syscall") | path.unwrap().contains("vvar")) {
             continue;
         }
         if map.flags == "rw-p" {
@@ -81,12 +81,12 @@ fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) -> Result<(), Er
     unsafe {
         let vec = copy_address(start, length, source);
         if !vec.is_ok() {
-            return Err(format_err!("oh no"));
+            return Err(format_err!("failed to copy map: {:?}", map));
         }
         let vec = vec.unwrap();
         let ptr = mmap(start as * mut c_void, length, perms, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
         if ptr == MAP_FAILED {
-            return Err(format_err!("oh no"));
+            return Err(format_err!("failed to copy map: {:?}", map));
         }
         let slice = std::slice::from_raw_parts_mut(start as * mut u8, length);
         slice.copy_from_slice(&vec);
