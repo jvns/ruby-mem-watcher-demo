@@ -12,6 +12,10 @@ fn main() {
     let source = pid.try_into_process_handle().unwrap();
     let maps = get_proc_maps(pid).unwrap();
     for map in maps {
+        let path = map.pathname.as_ref();
+        if path.is_some() && path.unwrap().contains("syscall") {
+            continue;
+        }
         if map.flags == "rw-p" {
             copy_map(&map, &source, PROT_READ | PROT_WRITE);
         }
@@ -24,14 +28,18 @@ fn main() {
 fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) {
     let start = map.range_start;
     let length = map.range_end - map.range_start;
+    println!("trying: {:?}", map);
     unsafe {
         let vec = copy_address(start, length, source);
         if !vec.is_ok() {
-            println!("failed: {:?}", map);
+            println!("...failed");
         }
         let ptr = mmap(start as * mut c_void, length, perms, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
         std::slice::from_raw_parts_mut(start as * mut u8, length).copy_from_slice(&vec.unwrap());
-        println!("success: {:?}", map);
+        if perms & PROT_EXEC != 0 {
+            libc::mprotect(start as *mut c_void, length, PROT_READ | PROT_EXEC);
+        }
+        println!("...success");
     }
 }
 
