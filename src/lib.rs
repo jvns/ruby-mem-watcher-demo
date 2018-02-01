@@ -3,3 +3,4 @@ extern crate libc;
 extern crate failure;
 pub mod proc_maps;
 pub mod bpf_rust;
+pub mod bpf_symbol;
