@@ -50,23 +50,37 @@ counts = b.get_table("counts")
 
 h = {}
 
-def get_thing(ptr, pid):
-    if (ptr, pid) not in h:
-        h[(ptr, pid)] = get_thing2(ptr, pid)
-    return h[(ptr, pid)]
-
 import subprocess
-def get_thing2(ptr, pid):
-    out = subprocess.check_output(["./target/debug/ruby-fork-test", str(pid), str(ptr)])
-    return out.strip()
+from collections import namedtuple
+Stats = namedtuple('Stats', ['count', 'pid', 'ptr'])
+
+def update_cache(top):
+    missing_ptrs = []
+    missing_ptr_stats = []
+    for stat in top:
+        if stat.ptr == 0:
+            continue
+        if (stat.ptr, stat.pid) not in h:
+            missing_ptrs.append(str(stat.ptr))
+            missing_ptr_stats.append(stat)
+    if len(missing_ptrs) == 0:
+        return
+    args = ["./target/debug/ruby-fork-test", str(missing_ptr_stats[0].pid)] + missing_ptrs
+    print(' '.join(args))
+    out = subprocess.check_output(args)
+    for (class_name, stat) in zip(out.split(), missing_ptr_stats):
+        h[(stat.ptr, stat.pid)] = class_name
+
+
 
 while True:
     sleep(1)
     os.system('clear')
     print("%20s | %s" % ("CLASS POINTER", "COUNT"))
     print("%20s | %s" % ("", ""))
-    top = list(reversed(sorted([(counts.get(key).value, key.ptr, key.pid) for key in counts.keys()])))
+    top = list(reversed(sorted([Stats(count=counts.get(key).value, ptr=key.ptr, pid=key.pid) for key in counts.keys()])))
     top = top[:25]
-    for (count, ptr, pid) in top:
-        s = get_thing(ptr, pid)
-        print("%20s | %s" % (s, count))
+    update_cache(top)
+    for stat in top:
+        s = h[(stat.ptr, stat.pid)]
+        print("%20s | %s" % (s, stat.count))
