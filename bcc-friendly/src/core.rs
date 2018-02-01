@@ -94,10 +94,18 @@ impl BCC {
         }
         let (path, addr) = symbol::resolve_symbol_path(name, symbol, 0x0, pid)?;
         let evName = format!("r_{}_0x{:x}", RE.replace_all(&path, "_"), addr);
-        return self.attach_uprobe(evName, bpf_probe_attach_type_BPF_PROBE_RETURN, path.to_string(), addr, fd, pid)
+        self.attach_uprobe_inner(evName, bpf_probe_attach_type_BPF_PROBE_RETURN, path.to_string(), addr, fd, pid)
+    }
+    pub fn attach_uprobe(&mut self, name: String, symbol: String, fd: fd_t, pid: pid_t) -> Result<(), Error> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new("[^a-zA-Z0-9]").unwrap();
+        }
+        let (path, addr) = symbol::resolve_symbol_path(name, symbol, 0x0, pid)?;
+        let evName = format!("r_{}_0x{:x}", RE.replace_all(&path, "_"), addr);
+        self.attach_uprobe_inner(evName, bpf_probe_attach_type_BPF_PROBE_ENTRY, path.to_string(), addr, fd, pid)
     }
 
-    fn attach_uprobe(&mut self, name: String, attachType: u32, path: String, addr: u64, fd: i32, pid: pid_t) -> Result<(), Error> {
+    fn attach_uprobe_inner(&mut self, name: String, attachType: u32, path: String, addr: u64, fd: i32, pid: pid_t) -> Result<(), Error> {
         let cname = CString::new(name.clone()).unwrap();
         let cpath = CString::new(path).unwrap();
         let group_fd = (-1 as i32) as MutPointer; // something is wrong with the type of this but it's a groupfd

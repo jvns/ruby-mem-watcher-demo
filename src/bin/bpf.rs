@@ -16,27 +16,23 @@ fn main() {
 fn do_main() -> Result<(), Error> {
     let code = "
 #include <uapi/linux/ptrace.h>
-struct readline_event_t {
-        u32 pid;
-        char str[80];
-} __attribute__((packed));
-BPF_PERF_OUTPUT(readline_events);
-int get_return_value(struct pt_regs *ctx) {
-        struct readline_event_t event = {};
-        u32 pid;
-        if (!PT_REGS_RC(ctx))
-                return 0;
-        pid = bpf_get_current_pid_tgid();
-        event.pid = pid;
-        bpf_probe_read(&event.str, sizeof(event.str), (void *)PT_REGS_RC(ctx));
-        readline_events.perf_submit(ctx, &event, sizeof(event));
-        return 0;
+typedef char strlenkey_t[80];
+BPF_HASH(counts, strlenkey_t);
+int count(struct pt_regs *ctx) {
+	if (!PT_REGS_PARM1(ctx))
+		return 0;
+	strlenkey_t key;
+	u64 zero = 0, *val;
+	bpf_probe_read(&key, sizeof(key), (void *)PT_REGS_PARM1(ctx));
+	val = counts.lookup_or_init(&key, &zero);
+	(*val)++;
+	return 0;
 }
     ";
     let mut module = BCC::new(code);
-    let retprobe = module.load_uprobe("get_return_value".to_string())?;
+    let retprobe = module.load_uprobe("count".to_string())?;
     println!("{:?}", retprobe);
-    module.attach_uretprobe("/bin/bash".to_string(), "readline".to_string(), retprobe, -1)?;
+    module.attach_uprobe("c".to_string(), "strlen".to_string(), retprobe, -1)?;
     Ok(())
 }
 
