@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 use regex::Regex;
-use bpf_symbol;
+use symbol;
 
 type fd_t = i32;
 type Pointer = * const std::os::raw::c_void;
@@ -17,7 +17,7 @@ type MutPointer = * mut std::os::raw::c_void;
 const NULL_POINTER: Pointer = 0 as * const std::os::raw::c_void;
 
 #[derive(Debug)]
-pub struct Module {
+pub struct BCC {
     p: MutPointer,
     uprobes: HashMap<String, MutPointer>,
     kprobes: HashMap<String, MutPointer>,
@@ -28,17 +28,17 @@ pub struct Module {
 pub struct compileRequest {
 	code: String,
 	cflags: Vec<String>,
-	// rspCh  chan *Module
+	// rspCh  chan *BCC
 }
-impl Module {
+impl BCC {
 
-    pub fn new(code: &str) -> Module {
+    pub fn new(code: &str) -> BCC {
         let cs = CString::new(code).unwrap();
         let ptr = unsafe {
             bpf_module_create_c_from_string(cs.as_ptr(), 2, 0 as *mut *const i8, 0)
         };
 
-        Module {
+        BCC {
             p: ptr,
             uprobes: HashMap::new(),
             kprobes: HashMap::new(),
@@ -47,16 +47,16 @@ impl Module {
     }
 
     pub fn load_net(&mut self, name: String) -> Result<fd_t, Error> { 
-        return self.load(name, bpf_prog_type_BPF_PROG_TYPE_SCHED_ACT, 0, 1)
+        return self.load(name, bpf_prog_type_BPF_PROG_TYPE_SCHED_ACT, 0, 0)
     }
 
     pub fn load_kprobe(&mut self, name: String) -> Result<fd_t, Error> { 
-        return self.load(name, bpf_prog_type_BPF_PROG_TYPE_KPROBE, 0, 1)
+        return self.load(name, bpf_prog_type_BPF_PROG_TYPE_KPROBE, 0, 0)
     }
 
     pub fn load_uprobe(&mut self, name: String) -> Result<fd_t, Error> { 
         // really??
-        return self.load(name, bpf_prog_type_BPF_PROG_TYPE_KPROBE, 0, 1)
+        return self.load(name, bpf_prog_type_BPF_PROG_TYPE_KPROBE, 0, 0)
     }
 
     pub fn load(&mut self, name: String, prog_type: u32, logLevel: i32, log_size: u32) -> Result<fd_t, Error> {
@@ -77,7 +77,7 @@ impl Module {
             let license = bpf_module_license(self.p);
             let version = bpf_module_kern_version(self.p);
             if start == 0 as *mut bpf_insn {
-                return Err(format_err!("Module: unable to find {}", &name));
+                return Err(format_err!("BCC: unable to find {}", &name));
             }
             let log_buf: Vec<u8> = Vec::with_capacity(log_size as usize);
             let fd = bpf_prog_load(prog_type, cname.as_ptr(), start, size, license, version, logLevel, log_buf.as_ptr() as *mut i8, log_buf.capacity() as u32);
@@ -92,7 +92,7 @@ impl Module {
         lazy_static! {
             static ref RE: Regex = Regex::new("[^a-zA-Z0-9]").unwrap();
         }
-        let (path, addr) = bpf_symbol::resolve_symbol_path(name, symbol, 0x0, pid)?;
+        let (path, addr) = symbol::resolve_symbol_path(name, symbol, 0x0, pid)?;
         let evName = format!("r_{}_0x{:x}", RE.replace_all(&path, "_"), addr);
         return self.attach_uprobe(evName, bpf_probe_attach_type_BPF_PROBE_RETURN, path.to_string(), addr, fd, pid)
     }
@@ -100,8 +100,10 @@ impl Module {
     fn attach_uprobe(&mut self, name: String, attachType: u32, path: String, addr: u64, fd: i32, pid: pid_t) -> Result<(), Error> {
         let cname = CString::new(name.clone()).unwrap();
         let cpath = CString::new(path).unwrap();
+        let group_fd = (-1 as i32) as MutPointer; // something is wrong with the type of this but it's a groupfd
         let uprobe = unsafe {
-            bpf_attach_uprobe(fd, attachType, cname.as_ptr(), cpath.as_ptr(), addr, pid, None, 0 as MutPointer)
+            println!("{:?} {:?} {:?} {:?} {:x} {:?}  ", fd, attachType, cname, cpath, addr, pid);
+            bpf_attach_uprobe(fd, attachType, cname.as_ptr(), cpath.as_ptr(), addr, pid, None /* cpu */, group_fd)
         };
         if uprobe as Pointer == NULL_POINTER {
             return Err(format_err!("Failed to attach uprobe"));
