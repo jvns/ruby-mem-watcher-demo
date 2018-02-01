@@ -15,6 +15,19 @@ use proc_maps::*;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let pid: pid_t = args[1].parse().unwrap();
+    let stuff = set_up_stuff(pid);
+    let result = call_fun(&stuff, &args);
+    for r in result {
+        println!("{}", r);
+    }
+}
+
+struct Stuff {
+    elf_file: elf::File,
+    map: MapRange,
+}
+
+fn set_up_stuff(pid: pid_t) -> Stuff {
     let source = pid.try_into_process_handle().unwrap();
     let maps = get_proc_maps(pid).unwrap();
     for map in &maps {
@@ -35,21 +48,27 @@ fn main() {
 
     let map = get_map(&maps, "bin/ruby", "r-xp").unwrap();
     let file = open_elf_file(pid, &map).unwrap();
-
-    let rb_mod_name_addr = get_symbol_addr(&map, &file, "rb_class2name").unwrap();
-    
-    if args.len() > 2 {
-        let value: u64 = args[2].parse().unwrap();
-        unsafe {
-            let f = std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64);
-            let out = f(value);
-            let s = std::slice::from_raw_parts_mut(out as * mut u8, 20);
-            let name = std::string::String::from_utf8_lossy(s);
-            println!("{}", name);
-        }
-    } else {
-        println!("usage: ruby-fork-test PID value-to-get");
+    Stuff {
+        map: map.clone(),
+        elf_file: file,
     }
+}
+
+fn call_fun(stuff: &Stuff, args: &Vec<String>) -> Vec<String> {
+    let rb_mod_name_addr = get_symbol_addr(&stuff.map, &stuff.elf_file, "rb_class2name").unwrap();
+    let f = unsafe {std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64)};
+    let mut vec: Vec<String> = vec!();
+    for arg in args[2..].iter() {
+        let value: u64 = arg.parse().unwrap();
+        let s = unsafe {
+            let out = f(value);
+            std::slice::from_raw_parts_mut(out as * mut u8, 20)
+        };
+        let name = std::string::String::from_utf8_lossy(s);
+        let name = name.trim_right_matches("\0");
+        vec.push(name.to_string());
+    } 
+    vec
 }
 
 fn open_elf_file(pid: pid_t, map: &MapRange) -> Result<elf::File, Error> {
