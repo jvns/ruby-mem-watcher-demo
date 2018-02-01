@@ -39,7 +39,7 @@ int count(struct pt_regs *ctx) {
     let mut module = BCC::new(code);
     let uprobe = module.load_uprobe("count".to_string())?;
     println!("{:?}", uprobe);
-    module.attach_uprobe("c".to_string(), "strlen".to_string(), uprobe, -1)?;
+    module.attach_uprobe("/lib/x86_64-linux-gnu/libc.so.6".to_string(), "strlen".to_string(), uprobe, -1)?;
     Ok(())
 }
 
