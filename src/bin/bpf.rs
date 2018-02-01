@@ -15,24 +15,31 @@ fn main() {
 
 fn do_main() -> Result<(), Error> {
     let code = "
+
 #include <uapi/linux/ptrace.h>
-typedef char strlenkey_t[80];
-BPF_HASH(counts, strlenkey_t);
+
+struct key_t {
+    char c[80];
+};
+BPF_HASH(counts, struct key_t);
+
 int count(struct pt_regs *ctx) {
-	if (!PT_REGS_PARM1(ctx))
-		return 0;
-	strlenkey_t key;
-	u64 zero = 0, *val;
-	bpf_probe_read(&key, sizeof(key), (void *)PT_REGS_PARM1(ctx));
-	val = counts.lookup_or_init(&key, &zero);
-	(*val)++;
-	return 0;
-}
+    if (!PT_REGS_PARM1(ctx))
+        return 0;
+
+    struct key_t key = {};
+    u64 zero = 0, *val;
+
+    bpf_probe_read(&key.c, sizeof(key.c), (void *)PT_REGS_PARM1(ctx));
+    val = counts.lookup_or_init(&key, &zero);
+    (*val)++;
+    return 0;
+};
     ";
     let mut module = BCC::new(code);
-    let retprobe = module.load_uprobe("count".to_string())?;
-    println!("{:?}", retprobe);
-    module.attach_uprobe("c".to_string(), "strlen".to_string(), retprobe, -1)?;
+    let uprobe = module.load_uprobe("count".to_string())?;
+    println!("{:?}", uprobe);
+    module.attach_uprobe("c".to_string(), "strlen".to_string(), uprobe, -1)?;
     Ok(())
 }
 
