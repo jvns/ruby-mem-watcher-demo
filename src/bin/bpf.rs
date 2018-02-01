@@ -1,13 +1,20 @@
-extern crate bcc_sys;
+extern crate bcc_friendly;
 extern crate libc;
+extern crate failure;
 extern crate ruby_fork_test;
 use ruby_fork_test::*;
 use libc::*;
+use bcc_friendly::*;
 use bpf_rust::*;
+use failure::Error;
 
 use std::ffi::CString;
 
 fn main() {
+    do_main().unwrap();
+}
+
+fn do_main() -> Result<(), Error> {
     let code = "
 #include <uapi/linux/ptrace.h>
 struct readline_event_t {
@@ -28,8 +35,10 @@ int get_return_value(struct pt_regs *ctx) {
 }
     ";
     let mut module = Module::new(code);
-    let fd = module.load_uprobe("get_return_value".to_string());
-    println!("{:?}", fd);
+    let retprobe = module.load_uprobe("get_return_value".to_string())?;
+    println!("{:?}", retprobe);
+    module.attach_uretprobe("/bin/bash".to_string(), "readline".to_string(), retprobe, -1)?;
+    Ok(())
 }
 
 

@@ -1,11 +1,15 @@
 //use libc::*;
 use std::ffi::CString;
 extern crate bcc_sys;
+extern crate regex;
 use failure::Error;
 use self::bcc_sys::bccapi::*;
 use std;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+
+use regex::Regex;
+use bpf_symbol;
 
 type fd_t = i32;
 type Pointer = * const std::os::raw::c_void;
@@ -84,13 +88,13 @@ impl Module {
         }
     }
 
-    func (bpf *Module) AttachUretprobe(name, symbol string, fd, pid int) error {
-        path, addr, err := resolveSymbolPath(name, symbol, 0x0, pid)
-            if err != nil {
-                return err
-            }
-        evName := fmt.Sprintf("r_%s_0x%x", uprobeRegexp.ReplaceAllString(path, "_"), addr)
-            return bpf.attachUProbe(evName, BPF_PROBE_RETURN, path, addr, fd, pid)
+    pub fn attach_uretprobe(&mut self, name: String, symbol: String, fd: fd_t, pid: pid_t) -> Result<(), Error> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new("[^a-zA-Z0-9]").unwrap();
+        }
+        let (path, addr) = bpf_symbol::resolve_symbol_path(name, symbol, 0x0, pid)?;
+        let evName = format!("r_{}_0x{:x}", RE.replace_all(&path, "_"), addr);
+        return self.attach_uprobe(evName, bpf_probe_attach_type_BPF_PROBE_RETURN, path.to_string(), addr, fd, pid)
     }
 
     fn attach_uprobe(&mut self, name: String, attachType: u32, path: String, addr: u64, fd: i32, pid: pid_t) -> Result<(), Error> {
@@ -100,7 +104,7 @@ impl Module {
             bpf_attach_uprobe(fd, attachType, cname.as_ptr(), cpath.as_ptr(), addr, pid, None, 0 as MutPointer)
         };
         if uprobe as Pointer == NULL_POINTER {
-            return Err(format_err!("hi"));
+            return Err(format_err!("Failed to attach uprobe"));
         }
         self.uprobes.insert(name, uprobe);
         Ok(())

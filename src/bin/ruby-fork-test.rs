@@ -1,7 +1,6 @@
 extern crate libc;
 extern crate read_process_memory;
 extern crate elf;
-extern crate bcc_sys;
 
 #[macro_use]
 extern crate failure;
