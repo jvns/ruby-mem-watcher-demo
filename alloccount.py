@@ -66,21 +66,26 @@ def update_cache(top):
     if len(missing_ptrs) == 0:
         return
     args = ["./target/debug/ruby-fork-test", str(missing_ptr_stats[0].pid)] + missing_ptrs
-    print(' '.join(args))
+    # print(' '.join(args))
     out = subprocess.check_output(args)
-    for (class_name, stat) in zip(out.split(), missing_ptr_stats):
-        h[(stat.ptr, stat.pid)] = class_name
+    lines = out.split("\n")
+    for l in lines:
+        if len(l) == 0:
+            continue
+        (ptr, name, pid) = l.split()
+        h[(int(ptr), int(pid))] = name
 
 
 
 while True:
-    sleep(1)
     os.system('clear')
-    print("%20s | %s" % ("CLASS POINTER", "COUNT"))
-    print("%20s | %s" % ("", ""))
+    print("%30s | %s" % ("CLASS", "COUNT"))
+    print("%30s | %s" % ("", ""))
     top = list(reversed(sorted([Stats(count=counts.get(key).value, ptr=key.ptr, pid=key.pid) for key in counts.keys()])))
-    top = top[:25]
-    update_cache(top)
+    top = top[:20]
+    if len(h) < 10:
+        update_cache(top)
     for stat in top:
-        s = h[(stat.ptr, stat.pid)]
-        print("%20s | %s" % (s, stat.count))
+        s = h.get((stat.ptr, stat.pid), "?? %s" % stat.ptr)
+        print("%30s | %s" % (s, stat.count))
+    sleep(1)
