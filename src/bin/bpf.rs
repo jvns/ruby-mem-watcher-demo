@@ -27,7 +27,8 @@ int get_return_value(struct pt_regs *ctx) {
         return 0;
 }
     ";
-    let module = Module::new(code);
+    let mut module = Module::new(code);
+    module.load_uprobe("get_return_value".to_string());
 }
 
 
