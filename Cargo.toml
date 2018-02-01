@@ -3,8 +3,13 @@ name = "ruby-fork-test"
 version = "0.1.0"
 authors = ["Julia Evans <julia@stripe.com>"]
 
+[lib]
+name = "ruby_fork_test"
+path = "src/lib.rs"
+
 [dependencies]
 "read-process-memory" = "0.1.2"
 "libc" = "0.2.36"
 "elf" = "0.0.10"
+"bcc-sys" = "0.5.0"
 "failure" = "0.1.1"
