@@ -1,8 +1,10 @@
 extern crate bcc_sys;
 extern crate libc;
+extern crate ruby_fork_test;
+use ruby_fork_test::*;
 use libc::*;
+use bpf_rust::*;
 
-use bcc_sys::bccapi::*;
 use std::ffi::CString;
 
 fn main() {
@@ -28,10 +30,4 @@ int get_return_value(struct pt_regs *ctx) {
     new_module(code);
 }
 
-fn new_module(code: &str) {
-    let cs = CString::new(code).unwrap();
-    unsafe {
-        bpf_module_create_c_from_string(cs.as_ptr(), 2, 0 as *mut *const c_char, 0)
-    };
-}
 
