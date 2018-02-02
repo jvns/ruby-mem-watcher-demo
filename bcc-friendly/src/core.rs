@@ -118,7 +118,6 @@ impl BCC {
         let cpath = CString::new(path).unwrap();
         let group_fd = (-1 as i32) as MutPointer; // something is wrong with the type of this but it's a groupfd
         let uprobe = unsafe {
-            println!("{:?} {:?} {:?} {:?} {:x} {:?}  ", fd, attachType, cname, cpath, addr, pid);
             bpf_attach_uprobe(fd, attachType, cname.as_ptr(), cpath.as_ptr(), addr, pid, None /* cpu */, group_fd)
         };
         if uprobe as Pointer == NULL_POINTER {
