@@ -62,14 +62,17 @@ impl EntryIter {
             self.key = Some(Vec::with_capacity(self.key_size));
             self.leaf = Some(Vec::with_capacity(self.leaf_size));
             bpf_get_first_key(fd, self.key_ptr(), self.key_size);
-            self.entry()
+            self.entry().unwrap()
         }
     }
 
-    pub fn entry(&self) -> Entry {
-        Entry {
-            key: self.key.as_ref().unwrap().clone(),
-            value: self.leaf.as_ref().unwrap().clone(),
+    pub fn entry(&self) -> Option<Entry> {
+        match self.key.as_ref() {
+            None => None,
+            Some(x) => Some(Entry {
+                key: self.key.as_ref().unwrap().clone(),
+                value: self.leaf.as_ref().unwrap().clone(),
+            }),
         }
     }
 }
@@ -78,18 +81,15 @@ impl EntryIter {
 
 impl Iterator for EntryIter {
     type Item = Entry;
-
     
     fn next(&mut self) -> Option<Entry> {
-        match self.key {
-            None => Some(self.start()),
-            Some(key) => {
-                let k = self.key_ptr();
-                match bpf_get_next_key(self.fd.expect("oh no"), k, k) {
-                    -1 => None,
-                    _ => Some(self.entry())
-                }
-            },
+        if let Some(e) = self.entry() {
+            return Some(e);
+        }
+        let k = self.key_ptr();
+        match bpf_get_next_key(self.fd.expect("oh no"), k, k) {
+            -1 => None,
+            _ => self.entry()
         }
     }
 }
