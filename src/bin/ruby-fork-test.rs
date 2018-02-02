@@ -14,6 +14,8 @@ use bcc_friendly::table;
 use failure::Error;
 use std::io::Cursor;
 use std::fs::File;
+use std::io::Write;
+use std::io::Read;
 
 use read_process_memory::*;
 use libc::*;
@@ -117,8 +119,6 @@ fn set_up_elf_struct(pid: pid_t) -> ElfStruct {
 }
 
 fn get_class_name(elf_struct: &ElfStruct, ptr: u64, rb_class2name_addr: u64) -> Option<String> {
-    use std::io::Write;
-    use std::io::Read;
     let f = unsafe {std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_class2name_addr as u64)};
     if !maps_contain_addr(ptr as usize, &elf_struct.maps) || ptr == 0 {
         return None;
