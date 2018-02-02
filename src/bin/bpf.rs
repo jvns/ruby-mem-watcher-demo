@@ -2,15 +2,10 @@ extern crate bcc_friendly;
 extern crate byteorder;
 extern crate libc;
 extern crate failure;
-extern crate ruby_fork_test;
 use byteorder::{NativeEndian, ReadBytesExt};
-use ruby_fork_test::*;
-use libc::*;
-use bcc_friendly::core::BCC;
+use bcc_friendly::core::BPF;
 use failure::Error;
-
-
-use std::ffi::CString;
+use std::io::Cursor;
 
 fn main() {
     do_main().unwrap();
@@ -39,7 +34,7 @@ int count(struct pt_regs *ctx) {
     return 0;
 };
     ";
-    let mut module = BCC::new(code);
+    let mut module = BPF::new(code);
     let uprobe = module.load_uprobe("count".to_string())?;
     module.attach_uprobe("/lib/x86_64-linux-gnu/libc.so.6".to_string(), "strlen".to_string(), uprobe, -1)?;
     let mut table = module.table("counts".to_string());
@@ -48,19 +43,17 @@ int count(struct pt_regs *ctx) {
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1000));
         let iter = table.into_iter();
-        let mut i = 0;
         for e in iter {
-            i += 1;
             let key = match e.key.iter().position(|&r| r == 0) {
                 Some(zero_pos) => String::from_utf8_lossy(&e.key[0..zero_pos]),
                 None => String::from_utf8_lossy(&e.key),
             };
-            let value = e.value.read_u64::<BigEndian>().unwrap();
-            println!("{:?} {:?}", key, value);
+            let value = Cursor::new(e.value).read_u64::<NativeEndian>().unwrap();
+            if value > 10 {
+                println!("{:?} {:?}", key, value);
+            }
         }
-        println!("{}", i);
     }
-    Ok(())
 }
 
 

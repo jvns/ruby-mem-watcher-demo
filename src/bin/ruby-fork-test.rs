@@ -59,7 +59,6 @@ fn call_fun(stuff: &Stuff, args: &Vec<String>, pid: pid_t) {
     unsafe { libc::signal(SIGSEGV, SIG_IGN) };
     let rb_mod_name_addr = get_symbol_addr(&stuff.map, &stuff.elf_file, "rb_class2name").unwrap();
     let f = unsafe {std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64)};
-    let mut vec: Vec<String> = vec!();
     for arg in args[2..].iter() {
         let value: u64 = arg.parse().unwrap();
         if !maps_contain_addr(value as usize, &stuff.maps) {

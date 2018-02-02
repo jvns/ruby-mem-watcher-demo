@@ -8,8 +8,6 @@ use std;
 type Pointer = * const std::os::raw::c_void;
 type MutPointer = * mut std::os::raw::c_void;
 
-use core::BCC;
-
 #[derive(Clone, Debug)]
 pub struct Table {
     id: size_t,
@@ -101,8 +99,6 @@ impl EntryIter {
         }
     }
 }
-
-
 
 impl Iterator for EntryIter {
     type Item = Entry;

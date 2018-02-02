@@ -19,7 +19,7 @@ type MutPointer = * mut std::os::raw::c_void;
 const NULL_POINTER: Pointer = 0 as * const std::os::raw::c_void;
 
 #[derive(Debug, Clone)]
-pub struct BCC {
+pub struct BPF {
     pub p: MutPointer,
     uprobes: HashMap<String, MutPointer>,
     kprobes: HashMap<String, MutPointer>,
@@ -30,17 +30,17 @@ pub struct BCC {
 pub struct compileRequest {
 	code: String,
 	cflags: Vec<String>,
-	// rspCh  chan *BCC
+	// rspCh  chan *BPF
 }
-impl BCC {
+impl BPF {
 
-    pub fn new(code: &str) -> BCC {
+    pub fn new(code: &str) -> BPF {
         let cs = CString::new(code).unwrap();
         let ptr = unsafe {
             bpf_module_create_c_from_string(cs.as_ptr(), 2, 0 as *mut *const i8, 0)
         };
 
-        BCC {
+        BPF {
             p: ptr,
             uprobes: HashMap::new(),
             kprobes: HashMap::new(),
@@ -85,7 +85,7 @@ impl BCC {
             let license = bpf_module_license(self.p);
             let version = bpf_module_kern_version(self.p);
             if start == 0 as *mut bpf_insn {
-                return Err(format_err!("BCC: unable to find {}", &name));
+                return Err(format_err!("BPF: unable to find {}", &name));
             }
             let log_buf: Vec<u8> = Vec::with_capacity(log_size as usize);
             let fd = bpf_prog_load(prog_type, cname.as_ptr(), start, size, license, version, logLevel, log_buf.as_ptr() as *mut i8, log_buf.capacity() as u32);
@@ -101,24 +101,24 @@ impl BCC {
             static ref RE: Regex = Regex::new("[^a-zA-Z0-9]").unwrap();
         }
         let (path, addr) = symbol::resolve_symbol_path(name, symbol, 0x0, pid)?;
-        let evName = format!("r_{}_0x{:x}", RE.replace_all(&path, "_"), addr);
-        self.attach_uprobe_inner(evName, bpf_probe_attach_type_BPF_PROBE_RETURN, path.to_string(), addr, fd, pid)
+        let ev_name = format!("r_{}_0x{:x}", RE.replace_all(&path, "_"), addr);
+        self.attach_uprobe_inner(ev_name, bpf_probe_attach_type_BPF_PROBE_RETURN, path.to_string(), addr, fd, pid)
     }
     pub fn attach_uprobe(&mut self, name: String, symbol: String, fd: fd_t, pid: pid_t) -> Result<(), Error> {
         lazy_static! {
             static ref RE: Regex = Regex::new("[^a-zA-Z0-9]").unwrap();
         }
         let (path, addr) = symbol::resolve_symbol_path(name, symbol, 0x0, pid)?;
-        let evName = format!("r_{}_0x{:x}", RE.replace_all(&path, "_"), addr);
-        self.attach_uprobe_inner(evName, bpf_probe_attach_type_BPF_PROBE_ENTRY, path.to_string(), addr, fd, pid)
+        let ev_name = format!("r_{}_0x{:x}", RE.replace_all(&path, "_"), addr);
+        self.attach_uprobe_inner(ev_name, bpf_probe_attach_type_BPF_PROBE_ENTRY, path.to_string(), addr, fd, pid)
     }
 
-    fn attach_uprobe_inner(&mut self, name: String, attachType: u32, path: String, addr: u64, fd: i32, pid: pid_t) -> Result<(), Error> {
+    fn attach_uprobe_inner(&mut self, name: String, attach_type: u32, path: String, addr: u64, fd: i32, pid: pid_t) -> Result<(), Error> {
         let cname = CString::new(name.clone()).unwrap();
         let cpath = CString::new(path).unwrap();
         let group_fd = (-1 as i32) as MutPointer; // something is wrong with the type of this but it's a groupfd
         let uprobe = unsafe {
-            bpf_attach_uprobe(fd, attachType, cname.as_ptr(), cpath.as_ptr(), addr, pid, None /* cpu */, group_fd)
+            bpf_attach_uprobe(fd, attach_type, cname.as_ptr(), cpath.as_ptr(), addr, pid, None /* cpu */, group_fd)
         };
         if uprobe as Pointer == NULL_POINTER {
             return Err(format_err!("Failed to attach uprobe"));
