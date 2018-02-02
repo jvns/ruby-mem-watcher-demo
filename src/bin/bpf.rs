@@ -34,10 +34,10 @@ int count(struct pt_regs *ctx) {
     return 0;
 };
     ";
-    let mut module = BPF::new(code);
+    let mut module = BPF::new(code)?;
     let uprobe = module.load_uprobe("count".to_string())?;
     module.attach_uprobe("/lib/x86_64-linux-gnu/libc.so.6".to_string(), "strlen".to_string(), uprobe, -1)?;
-    let mut table = module.table("counts".to_string());
+    let mut table = module.table("counts");
     println!("{:?}", table.key_size());
     println!("{:?}", table.leaf_size());
     loop {

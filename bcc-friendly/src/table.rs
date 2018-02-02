@@ -48,8 +48,6 @@ pub struct Entry {
 }
 
 
-type fd_t = i32;
-
 pub struct EntryIter {
     key: Option<Vec<u8>>,
     leaf: Option<Vec<u8>>,
@@ -69,7 +67,7 @@ impl EntryIter {
 
     fn zero_vec(&self, size: usize) -> Vec<u8> {
         let mut vec = Vec::with_capacity(size);
-        for i in 0..size {
+        for _ in 0..size {
             vec.push(0);
         }
         vec
@@ -82,7 +80,7 @@ impl EntryIter {
         self.key = Some(self.zero_vec(key_size));
         self.leaf = Some(self.zero_vec(leaf_size));
         unsafe {
-            let (k, l) = self.key_ptr().unwrap();
+            let (k, _) = self.key_ptr().unwrap();
             bpf_get_first_key(self.fd.unwrap(), k, key_size);
             self.entry().unwrap()
         }

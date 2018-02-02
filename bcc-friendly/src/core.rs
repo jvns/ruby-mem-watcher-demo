@@ -1,6 +1,5 @@
 //use libc::*;
 use std::ffi::CString;
-use std::ffi::CStr;
 extern crate bcc_sys;
 extern crate regex;
 use failure::Error;
@@ -12,6 +11,7 @@ use std::collections::hash_map::Entry;
 use regex::Regex;
 use symbol;
 use table::Table;
+
 use types::*;
 
 const NULL_POINTER: Pointer = 0 as * const std::os::raw::c_void;
