@@ -42,7 +42,16 @@ int count(struct pt_regs *ctx) {
     let mut table = module.table("counts".to_string());
     println!("{:?}", table.key_size());
     println!("{:?}", table.leaf_size());
-    let mut iter = table.into_iter();
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        let iter = table.into_iter();
+        let mut i = 0;
+        for e in iter {
+            i += 1;
+            println!("{:?} {:?}", e.key, e.value);
+        }
+        println!("{}", i);
+    }
     Ok(())
 }
 

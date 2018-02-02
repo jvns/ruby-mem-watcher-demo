@@ -41,7 +41,7 @@ impl Table {
     }
 
     pub fn into_iter(&self) -> EntryIter {
-        EntryIter{key: None, leaf: None, table: self.clone(), key_size: 0, leaf_size: 0, fd: None}
+        EntryIter{key: None, leaf: None, table: self.clone(), fd: None}
     }
 }
 
@@ -56,25 +56,34 @@ type fd_t = i32;
 pub struct EntryIter {
     key: Option<Vec<u8>>,
     leaf: Option<Vec<u8>>,
-    key_size: usize,
-    leaf_size: usize,
     fd: Option<fd_t>,
     table: Table,
 }
 
 impl EntryIter {
-    pub fn key_ptr(&mut self) -> *mut std::os::raw::c_void {
-        self.key.as_mut().unwrap().as_mut_ptr() as *mut u8 as  *mut std::os::raw::c_void 
+    pub fn key_ptr(&mut self) -> Option<*mut std::os::raw::c_void> {
+        match self.key.as_mut() {
+            Some(k) => Some(k.as_mut_ptr() as *mut u8 as  *mut std::os::raw::c_void),
+            None => None,
+        }
+    }
+
+    fn zero_vec(&self, size: usize) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(size);
+        for i in 0..size {
+            vec.push(0);
+        }
+        vec
     }
 
     pub fn start(&mut self) -> Entry {
         self.fd = Some(self.table.fd());
-        self.key_size = self.table.key_size();
-        self.leaf_size = self.table.leaf_size();
-        self.key = Some(Vec::with_capacity(self.key_size));
-        self.leaf = Some(Vec::with_capacity(self.leaf_size));
+        let key_size = self.table.key_size();
+        let leaf_size = self.table.leaf_size();
+        self.key = Some(self.zero_vec(key_size));
+        self.leaf = Some(self.zero_vec(leaf_size));
         unsafe {
-            bpf_get_first_key(self.fd.unwrap(), self.key_ptr(), self.key_size);
+            bpf_get_first_key(self.fd.unwrap(), self.key_ptr().unwrap(), key_size);
             self.entry().unwrap()
         }
     }
@@ -96,13 +105,13 @@ impl Iterator for EntryIter {
     type Item = Entry;
     
     fn next(&mut self) -> Option<Entry> {
-        if let Some(e) = self.entry() {
-            return Some(e);
-        }
-        let k = self.key_ptr();
-        match unsafe {bpf_get_next_key(self.fd.expect("oh no"), k, k) } {
-            -1 => None,
-            _ => self.entry()
+        if let Some(k) = self.key_ptr() {
+            match unsafe {bpf_get_next_key(self.fd.expect("oh no"), k, k) } {
+                -1 => None,
+                _ => self.entry()
+            }
+        } else {
+            Some(self.start())
         }
     }
 }
