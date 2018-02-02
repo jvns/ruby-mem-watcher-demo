@@ -11,6 +11,7 @@ use std::collections::hash_map::Entry;
 
 use regex::Regex;
 use symbol;
+use table::Table;
 
 type fd_t = i32;
 type Pointer = * const std::os::raw::c_void;
@@ -47,9 +48,10 @@ impl BCC {
         }
     }
 
-    pub fn table_id(&self, name: String) -> usize {
+    pub fn table(&self, name: String) -> Table {
         let cname = CString::new(name).unwrap();
-        unsafe { bpf_table_id(self.p as MutPointer, cname.as_ptr()) }
+        let id = unsafe { bpf_table_id(self.p as MutPointer, cname.as_ptr()) };
+        Table::new(id, self.p)
     }
 
     pub fn load_net(&mut self, name: String) -> Result<fd_t, Error> { 

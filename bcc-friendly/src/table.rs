@@ -10,15 +10,15 @@ type MutPointer = * mut std::os::raw::c_void;
 
 use core::BCC;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Table {
     id: size_t,
     p: MutPointer,
 }
 
 impl Table {
-    pub fn new(id: usize, module: BCC) -> Table{
-        Table {id, p: module.p}
+    pub fn new(id: usize, p: MutPointer) -> Table{
+        Table {id, p}
     }
 
     pub fn key_size(&mut self) -> usize {
