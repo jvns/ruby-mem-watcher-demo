@@ -1,5 +1,4 @@
 use libc::size_t;
-use std::ffi::CString;
 extern crate bcc_sys;
 extern crate regex;
 use self::bcc_sys::bccapi::*;
@@ -19,7 +18,7 @@ impl Table {
     }
 
     pub fn id(&mut self) -> String {
-        let cstr = unsafe {
+        let _cstr = unsafe {
             bpf_table_name(self.module.p, self.id)
         };
         "TODO".to_string()

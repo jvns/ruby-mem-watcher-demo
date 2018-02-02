@@ -3,8 +3,6 @@ extern crate bcc_sys;
 use failure::Error;
 use self::bcc_sys::bccapi::*;
 use std::mem;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 
 pub fn resolve_symbol_path(module: String, symname: String, addr: u64, pid: pid_t) -> Result<(String, u64), Error> {
     let pid: pid_t = match pid {
