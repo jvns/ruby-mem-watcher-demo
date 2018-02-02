@@ -1,5 +1,6 @@
 //use libc::*;
 use std::ffi::CString;
+use std::ffi::CStr;
 extern crate bcc_sys;
 extern crate regex;
 use failure::Error;
@@ -44,6 +45,11 @@ impl BCC {
             kprobes: HashMap::new(),
             funcs: HashMap::new(),
         }
+    }
+
+    pub fn table_id(&self, name: String) -> usize {
+        let cname = CString::new(name).unwrap();
+        unsafe { bpf_table_id(self.p as MutPointer, cname.as_ptr()) }
     }
 
     pub fn load_net(&mut self, name: String) -> Result<fd_t, Error> { 

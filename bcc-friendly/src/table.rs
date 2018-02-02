@@ -2,26 +2,42 @@ use libc::size_t;
 extern crate bcc_sys;
 extern crate regex;
 use self::bcc_sys::bccapi::*;
+use std::ffi::CStr;
 use std;
+
+type Pointer = * const std::os::raw::c_void;
+type MutPointer = * mut std::os::raw::c_void;
 
 use core::BCC;
 
 #[derive(Clone)]
 pub struct Table {
-    pub id: size_t,
-    pub module: BCC,
+    id: size_t,
+    p: MutPointer,
 }
 
 impl Table {
     pub fn new(id: usize, module: BCC) -> Table{
-        Table {id, module}
+        Table {id, p: module.p}
     }
 
-    pub fn id(&mut self) -> String {
-        let _cstr = unsafe {
-            bpf_table_name(self.module.p, self.id)
-        };
-        "TODO".to_string()
+    pub fn key_size(&mut self) -> usize {
+        unsafe {bpf_table_key_size_id(self.p, self.id)}
+    }
+
+    pub fn fd(&mut self) -> fd_t {
+        unsafe {bpf_table_fd_id(self.p, self.id)}
+    }
+
+    pub fn leaf_size(&mut self) -> usize {
+        unsafe {bpf_table_leaf_size_id(self.p, self.id)}
+    }
+
+    pub fn name(&mut self) -> String {
+        unsafe {
+            let cs = bpf_table_name(self.p, self.id);
+            CStr::from_ptr(cs).to_str().unwrap().to_string()
+        }
     }
 
     pub fn into_iter(&self) -> EntryIter {
@@ -52,15 +68,13 @@ impl EntryIter {
     }
 
     pub fn start(&mut self) -> Entry {
+        self.fd = Some(self.table.fd());
+        self.key_size = self.table.key_size();
+        self.leaf_size = self.table.leaf_size();
+        self.key = Some(Vec::with_capacity(self.key_size));
+        self.leaf = Some(Vec::with_capacity(self.leaf_size));
         unsafe {
-            let p = self.table.module.p;
-            let fd = bpf_table_fd_id(p, self.table.id);
-            self.fd = Some(fd);
-            self.key_size = bpf_table_key_size_id(p, self.table.id);
-            self.leaf_size = bpf_table_leaf_size_id(p, self.table.id);
-            self.key = Some(Vec::with_capacity(self.key_size));
-            self.leaf = Some(Vec::with_capacity(self.leaf_size));
-            bpf_get_first_key(fd, self.key_ptr(), self.key_size);
+            bpf_get_first_key(self.fd.unwrap(), self.key_ptr(), self.key_size);
             self.entry().unwrap()
         }
     }
