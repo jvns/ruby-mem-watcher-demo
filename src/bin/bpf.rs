@@ -48,7 +48,11 @@ int count(struct pt_regs *ctx) {
         let mut i = 0;
         for e in iter {
             i += 1;
-            println!("{:?} {:?}", e.key, e.value);
+            let key = match e.key.iter().position(|&r| r == 0) {
+                Some(zero_pos) => String::from_utf8_lossy(&e.key[0..zero_pos]),
+                None => String::from_utf8_lossy(&e.key),
+            };
+            println!("{:?} {:?}", key, e.value);
         }
         println!("{}", i);
     }
