@@ -69,8 +69,8 @@ impl EntryIter {
     pub fn entry(&self) -> Option<Entry> {
         match self.key.as_ref() {
             None => None,
-            Some(x) => Some(Entry {
-                key: self.key.as_ref().unwrap().clone(),
+            Some(k) => Some(Entry {
+                key: k.clone(),
                 value: self.leaf.as_ref().unwrap().clone(),
             }),
         }
