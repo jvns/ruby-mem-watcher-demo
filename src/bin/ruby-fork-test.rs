@@ -37,7 +37,6 @@ fn main() {
             let mut kcursor = Cursor::new(e.key);
             let ptr = kcursor.read_u64::<NativeEndian>().unwrap();
             let name = cache.entry(ptr).or_insert_with(|| get_class_name(&stuff, ptr, rb_class2name_addr as u64));
-            let pid = kcursor.read_i32::<NativeEndian>().unwrap();
             let value = Cursor::new(e.value).read_u64::<NativeEndian>().unwrap();
             if value > 100 {
                 println!("{:?} {:?}",  name, value);
@@ -59,7 +58,6 @@ fn connect(pid: pid_t) -> Result<Table, Error> {
 
 typedef struct blah {
     size_t ptr;
-    pid_t pid;
 } blah_t;
 
 BPF_HASH(counts, blah_t);
@@ -70,7 +68,6 @@ int count(struct pt_regs *ctx) {
     blah_t key = {};
     size_t ptr = PT_REGS_PARM1(ctx);
     key.ptr = ptr;
-    key.pid = pid;
     val = counts.lookup_or_init(&key, &zero);
     (*val)++;
     return 0;
