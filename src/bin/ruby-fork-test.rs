@@ -6,6 +6,7 @@ extern crate libc;
 #[macro_use]
 extern crate failure;
 
+use std::collections::HashMap;
 use byteorder::{NativeEndian, ReadBytesExt};
 use bcc_friendly::core::BPF;
 use bcc_friendly::table::Table;
@@ -28,19 +29,21 @@ fn main() {
     let table = &connect(pid).unwrap();
     let stuff = set_up_stuff(pid);
     let rb_class2name_addr = get_symbol_addr(&stuff.map, &stuff.elf_file, "rb_class2name").unwrap();
+    let mut cache: HashMap<u64, Option<String>> = HashMap::new();
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1000));
         let iter: table::EntryIter = table.into_iterz();
         for e in iter {
             let mut kcursor = Cursor::new(e.key);
             let ptr = kcursor.read_u64::<NativeEndian>().unwrap();
-            let name = get_class_name(&stuff, ptr, rb_class2name_addr as u64);
+            let name = cache.entry(ptr).or_insert_with(|| get_class_name(&stuff, ptr, rb_class2name_addr as u64));
             let pid = kcursor.read_i32::<NativeEndian>().unwrap();
             let value = Cursor::new(e.value).read_u64::<NativeEndian>().unwrap();
             if value > 100 {
-                println!("{:x} {:?} {:?} {:?}", ptr, name, pid, value);
+                println!("{:?} {:?}",  name, value);
             }
         }
+        print!("{}[2J", 27 as char);
     }
 }
 
