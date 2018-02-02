@@ -1,13 +1,21 @@
-extern crate libc;
 extern crate read_process_memory;
 extern crate elf;
-
+extern crate bcc_friendly;
+extern crate byteorder;
+extern crate libc;
 #[macro_use]
 extern crate failure;
 
+use byteorder::{NativeEndian, ReadBytesExt};
+use bcc_friendly::core::BPF;
+use bcc_friendly::table::Table;
+use bcc_friendly::table;
+use failure::Error;
+use std::io::Cursor;
+use std::fs::File;
+
 use read_process_memory::*;
 use libc::*;
-use failure::Error;
 
 extern crate ruby_fork_test;
 use ruby_fork_test::*;
@@ -17,14 +25,57 @@ use proc_maps::*;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let pid: pid_t = args[1].parse().unwrap();
+    let table = &connect(pid).unwrap();
     let stuff = set_up_stuff(pid);
-    call_fun(&stuff, &args, pid);
+    let rb_mod_name_addr = get_symbol_addr(&stuff.map, &stuff.elf_file, "rb_class2name").unwrap();
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        let iter: table::EntryIter = table.into_iterz();
+        for e in iter {
+            let mut kcursor = Cursor::new(e.key);
+            let ptr = kcursor.read_u64::<NativeEndian>().unwrap();
+            let pid = kcursor.read_i32::<NativeEndian>().unwrap();
+            let value = Cursor::new(e.value).read_u64::<NativeEndian>().unwrap();
+            if value > 10 {
+                println!("{:x} {:?} {:?}", ptr, pid, value);
+            }
+        }
+    }
 }
 
 struct Stuff {
     elf_file: elf::File,
     map: MapRange,
     maps: Vec<MapRange>,
+}
+
+fn connect(pid: pid_t) -> Result<Table, Error> {
+    let code = "
+#include <uapi/linux/ptrace.h>
+
+typedef struct blah {
+    size_t ptr;
+    pid_t pid;
+} blah_t;
+
+BPF_HASH(counts, blah_t);
+
+int count(struct pt_regs *ctx) {
+    pid_t pid = bpf_get_current_pid_tgid() & 0xffffffff;
+    u64 zero = 0, *val;
+    blah_t key = {};
+    size_t ptr = PT_REGS_PARM1(ctx);
+    key.ptr = ptr;
+    key.pid = pid;
+    val = counts.lookup_or_init(&key, &zero);
+    (*val)++;
+    return 0;
+};
+    ";
+    let mut module = BPF::new(code)?;
+    let uprobe = module.load_uprobe("count".to_string())?;
+    module.attach_uprobe("/home/bork/.rbenv/versions/2.4.0/bin/ruby".to_string(), "newobj_slowpath".to_string(), uprobe, pid)?;
+    Ok(module.table("counts"))
 }
 
 fn set_up_stuff(pid: pid_t) -> Stuff {
@@ -55,33 +106,36 @@ fn set_up_stuff(pid: pid_t) -> Stuff {
     }
 }
 
-fn call_fun(stuff: &Stuff, args: &Vec<String>, pid: pid_t) {
-    unsafe { libc::signal(SIGSEGV, SIG_IGN) };
-    let rb_mod_name_addr = get_symbol_addr(&stuff.map, &stuff.elf_file, "rb_class2name").unwrap();
+fn get_class_name(stuff: &Stuff, ptr: u64, rb_mod_name_addr: u64) -> Option<String> {
+    use std::io::Write;
+    use std::io::Read;
     let f = unsafe {std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64)};
-    for arg in args[2..].iter() {
-        let value: u64 = arg.parse().unwrap();
-        if !maps_contain_addr(value as usize, &stuff.maps) {
-            continue;
-        }
-        match unsafe {libc::fork()} {
-            0 => {
-                let s = unsafe {
-                    let mut out = f(value);
-                    std::slice::from_raw_parts_mut(out as * mut u8, 20)
-                };
-                let name = std::string::String::from_utf8_lossy(s);
-                let name = name.trim_right_matches("\0");
-                println!("{} {} {}", value, name, pid);
-                std::process::exit(0);
-            },
-            -1 => panic!("oh no"),
-            _ => {
-                let mut status: c_int = 0;
-                unsafe {libc::wait(&mut status)};
-            },
-        }
-    } 
+    if !maps_contain_addr(ptr as usize, &stuff.maps) {
+        return None;
+    }
+    let filename = "/tmp/out.txt";
+    match unsafe {libc::fork()} {
+        0 => {
+            let s = unsafe {
+                let mut out = f(ptr);
+                std::slice::from_raw_parts_mut(out as * mut u8, 20)
+            };
+            let name = std::string::String::from_utf8_lossy(s);
+            let name = name.trim_right_matches("\0");
+            let mut f = File::create(filename).unwrap();
+            write!(f, "{}", name);
+            std::process::exit(0);
+        },
+        -1 => panic!("oh no"),
+        _ => {
+            let mut status: c_int = 0;
+            unsafe {libc::wait(&mut status)};
+            let mut f = File::open(filename).unwrap();
+            let mut contents = String::new();
+            f.read_to_string(&mut contents).unwrap();
+            Some(contents)
+        },
+    }
 }
 
 fn open_elf_file(pid: pid_t, map: &MapRange) -> Result<elf::File, Error> {

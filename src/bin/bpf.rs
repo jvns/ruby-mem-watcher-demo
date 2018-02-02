@@ -42,7 +42,7 @@ int count(struct pt_regs *ctx) {
     println!("{:?}", table.leaf_size());
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1000));
-        let iter = table.into_iter();
+        let iter = table.into_iterz();
         for e in iter {
             let key = match e.key.iter().position(|&r| r == 0) {
                 Some(zero_pos) => String::from_utf8_lossy(&e.key[0..zero_pos]),

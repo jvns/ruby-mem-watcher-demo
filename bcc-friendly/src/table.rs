@@ -37,7 +37,7 @@ impl Table {
         }
     }
 
-    pub fn into_iter(&self) -> EntryIter {
+    pub fn into_iterz(&self) -> EntryIter {
         EntryIter{key: None, leaf: None, table: self.clone(), fd: None}
     }
 }
