@@ -27,26 +27,35 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let pid: pid_t = args[1].parse().unwrap();
     let table = &connect(pid).unwrap();
-    let stuff = set_up_stuff(pid);
-    let rb_class2name_addr = get_symbol_addr(&stuff.map, &stuff.elf_file, "rb_class2name").unwrap();
+    let elf_struct = set_up_elf_struct(pid);
+    let rb_class2name_addr = get_symbol_addr(&elf_struct.map, &elf_struct.elf_file, "rb_class2name").unwrap();
     let mut cache: HashMap<u64, Option<String>> = HashMap::new();
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1000));
         let iter: table::EntryIter = table.into_iterz();
+        let mut blah: Vec<(u64, Option<String>)> = vec!();
         for e in iter {
             let mut kcursor = Cursor::new(e.key);
             let ptr = kcursor.read_u64::<NativeEndian>().unwrap();
-            let name = cache.entry(ptr).or_insert_with(|| get_class_name(&stuff, ptr, rb_class2name_addr as u64));
             let value = Cursor::new(e.value).read_u64::<NativeEndian>().unwrap();
-            if value > 100 {
-                println!("{:?} {:?}",  name, value);
+            if value > 50 {
+                let name = cache.entry(ptr).or_insert_with(|| get_class_name(&elf_struct, ptr, rb_class2name_addr as u64));
+                blah.push((value, name.clone()));
             }
+        }
+        blah.sort();
+        for (value, name) in blah {
+            let n = match name {
+                None => "???",
+                Some(ref n) => n,
+            };
+            println!("{name:>20} {value:?}", name=n, value=value);
         }
         print!("{}[2J", 27 as char);
     }
 }
 
-struct Stuff {
+struct ElfStruct {
     elf_file: elf::File,
     map: MapRange,
     maps: Vec<MapRange>,
@@ -75,11 +84,11 @@ int count(struct pt_regs *ctx) {
     ";
     let mut module = BPF::new(code)?;
     let uprobe = module.load_uprobe("count".to_string())?;
-    module.attach_uprobe("/home/bork/.rbenv/versions/2.4.0/bin/ruby".to_string(), "newobj_slowpath".to_string(), uprobe, pid)?;
+    module.attach_uprobe(format!("/proc/{}/exe", pid), "newobj_slowpath".to_string(), uprobe, pid)?;
     Ok(module.table("counts"))
 }
 
-fn set_up_stuff(pid: pid_t) -> Stuff {
+fn set_up_elf_struct(pid: pid_t) -> ElfStruct {
     let source = pid.try_into_process_handle().unwrap();
     let maps = get_proc_maps(pid).unwrap();
     for map in &maps {
@@ -100,18 +109,18 @@ fn set_up_stuff(pid: pid_t) -> Stuff {
 
     let map = get_map(&maps, "bin/ruby", "r-xp").unwrap();
     let file = open_elf_file(pid, &map).unwrap();
-    Stuff {
+    ElfStruct {
         maps: maps,
         map: map.clone(),
         elf_file: file,
     }
 }
 
-fn get_class_name(stuff: &Stuff, ptr: u64, rb_class2name_addr: u64) -> Option<String> {
+fn get_class_name(elf_struct: &ElfStruct, ptr: u64, rb_class2name_addr: u64) -> Option<String> {
     use std::io::Write;
     use std::io::Read;
     let f = unsafe {std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_class2name_addr as u64)};
-    if !maps_contain_addr(ptr as usize, &stuff.maps) {
+    if !maps_contain_addr(ptr as usize, &elf_struct.maps) || ptr == 0 {
         return None;
     }
     let filename = "/tmp/out.txt";
