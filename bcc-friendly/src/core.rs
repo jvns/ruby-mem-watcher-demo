@@ -16,9 +16,9 @@ type Pointer = * const std::os::raw::c_void;
 type MutPointer = * mut std::os::raw::c_void;
 const NULL_POINTER: Pointer = 0 as * const std::os::raw::c_void;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BCC {
-    p: MutPointer,
+    pub p: MutPointer,
     uprobes: HashMap<String, MutPointer>,
     kprobes: HashMap<String, MutPointer>,
     funcs: HashMap<String, fd_t>,
