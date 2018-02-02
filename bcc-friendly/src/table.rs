@@ -48,7 +48,7 @@ pub struct EntryIter {
 
 impl EntryIter {
     pub fn key_ptr(&mut self) -> *mut std::os::raw::c_void {
-        self.key.unwrap().as_mut_ptr() as *mut u8 as  *mut std::os::raw::c_void 
+        self.key.as_mut().unwrap().as_mut_ptr() as *mut u8 as  *mut std::os::raw::c_void 
     }
 
     pub fn start(&mut self) -> Entry {
