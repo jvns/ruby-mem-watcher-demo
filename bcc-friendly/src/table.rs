@@ -5,8 +5,7 @@ use self::bcc_sys::bccapi::*;
 use std::ffi::CStr;
 use std;
 
-type Pointer = * const std::os::raw::c_void;
-type MutPointer = * mut std::os::raw::c_void;
+use types::*;
 
 #[derive(Clone, Debug)]
 pub struct Table {

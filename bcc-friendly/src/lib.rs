@@ -9,3 +9,4 @@ pub mod core;
 pub mod symbol;
 pub mod perf;
 pub mod table;
+pub mod types;

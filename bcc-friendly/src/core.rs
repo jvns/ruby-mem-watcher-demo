@@ -12,10 +12,8 @@ use std::collections::hash_map::Entry;
 use regex::Regex;
 use symbol;
 use table::Table;
+use types::*;
 
-type fd_t = i32;
-type Pointer = * const std::os::raw::c_void;
-type MutPointer = * mut std::os::raw::c_void;
 const NULL_POINTER: Pointer = 0 as * const std::os::raw::c_void;
 
 #[derive(Debug, Clone)]
@@ -24,31 +22,24 @@ pub struct BPF {
     uprobes: HashMap<String, MutPointer>,
     kprobes: HashMap<String, MutPointer>,
     funcs: HashMap<String, fd_t>,
-// 	funcs   map[string]int
 }
 
-pub struct compileRequest {
-	code: String,
-	cflags: Vec<String>,
-	// rspCh  chan *BPF
-}
 impl BPF {
-
-    pub fn new(code: &str) -> BPF {
-        let cs = CString::new(code).unwrap();
+    pub fn new(code: &str) -> Result<BPF, Error> {
+        let cs = CString::new(code)?;
         let ptr = unsafe {
             bpf_module_create_c_from_string(cs.as_ptr(), 2, 0 as *mut *const i8, 0)
         };
 
-        BPF {
+        Ok(BPF {
             p: ptr,
             uprobes: HashMap::new(),
             kprobes: HashMap::new(),
             funcs: HashMap::new(),
-        }
+        })
     }
 
-    pub fn table(&self, name: String) -> Table {
+    pub fn table(&self, name: &str) -> Table {
         let cname = CString::new(name).unwrap();
         let id = unsafe { bpf_table_id(self.p as MutPointer, cname.as_ptr()) };
         Table::new(id, self.p)
@@ -67,17 +58,17 @@ impl BPF {
         return self.load(name, bpf_prog_type_BPF_PROG_TYPE_KPROBE, 0, 0)
     }
 
-    pub fn load(&mut self, name: String, prog_type: u32, logLevel: i32, log_size: u32) -> Result<fd_t, Error> {
+    pub fn load(&mut self, name: String, prog_type: u32, log_level: i32, log_size: u32) -> Result<fd_t, Error> {
         match self.funcs.entry(name.clone()) {
             Entry::Occupied(o) => {return Ok(o.into_mut().clone());},
             _ => {},
         };
-        let fd = self.load_inner(&name, prog_type, logLevel, log_size)?;
+        let fd = self.load_inner(&name, prog_type, log_level, log_size)?;
         self.funcs.insert(name.clone(), fd);
         Ok(fd)
     }
 
-    pub fn load_inner(&mut self, name: &str, prog_type: u32, logLevel: i32, log_size: u32) -> Result<fd_t, Error> {
+    pub fn load_inner(&mut self, name: &str, prog_type: u32, log_level: i32, log_size: u32) -> Result<fd_t, Error> {
         let cname = CString::new(name.to_string()).unwrap();
         unsafe {
             let start: *mut bpf_insn = bpf_function_start(self.p, cname.as_ptr()) as *mut bpf_insn;
@@ -88,7 +79,7 @@ impl BPF {
                 return Err(format_err!("BPF: unable to find {}", &name));
             }
             let log_buf: Vec<u8> = Vec::with_capacity(log_size as usize);
-            let fd = bpf_prog_load(prog_type, cname.as_ptr(), start, size, license, version, logLevel, log_buf.as_ptr() as *mut i8, log_buf.capacity() as u32);
+            let fd = bpf_prog_load(prog_type, cname.as_ptr(), start, size, license, version, log_level, log_buf.as_ptr() as *mut i8, log_buf.capacity() as u32);
             if fd < 0 {
                 return Err(format_err!("error loading BPF program: {}", &name));
             }

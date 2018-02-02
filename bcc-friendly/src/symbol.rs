@@ -10,10 +10,10 @@ pub fn resolve_symbol_path(module: String, symname: String, addr: u64, pid: pid_
         x => x,
     };
 
-	bccResolveSymname(module, symname, addr, pid)
+	resolve_symname(module, symname, addr, pid)
 }
 
-pub fn bccResolveSymname(module: String, symname: String, addr: u64, pid: pid_t) -> Result<(String, u64), Error> {
+pub fn resolve_symname(module: String, symname: String, addr: u64, pid: pid_t) -> Result<(String, u64), Error> {
     let mut symbol = unsafe {mem::zeroed::<bcc_symbol>()};
     let cmodule = CString::new(module.clone()).unwrap();
     let csymname = CString::new(symname.clone()).unwrap();
