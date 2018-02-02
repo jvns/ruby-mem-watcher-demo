@@ -61,9 +61,11 @@ pub struct EntryIter {
 }
 
 impl EntryIter {
-    pub fn key_ptr(&mut self) -> Option<*mut std::os::raw::c_void> {
+    pub fn key_ptr(&mut self) -> Option<(*mut std::os::raw::c_void, *mut std::os::raw::c_void)> {
         match self.key.as_mut() {
-            Some(k) => Some(k.as_mut_ptr() as *mut u8 as  *mut std::os::raw::c_void),
+            Some(k) => Some((
+                    k.as_mut_ptr() as *mut u8 as  *mut std::os::raw::c_void,
+                    self.leaf.as_mut().unwrap().as_mut_ptr() as *mut u8 as *mut std::os::raw::c_void)),
             None => None,
         }
     }
@@ -83,7 +85,8 @@ impl EntryIter {
         self.key = Some(self.zero_vec(key_size));
         self.leaf = Some(self.zero_vec(leaf_size));
         unsafe {
-            bpf_get_first_key(self.fd.unwrap(), self.key_ptr().unwrap(), key_size);
+            let (k, l) = self.key_ptr().unwrap();
+            bpf_get_first_key(self.fd.unwrap(), k, key_size);
             self.entry().unwrap()
         }
     }
@@ -105,10 +108,15 @@ impl Iterator for EntryIter {
     type Item = Entry;
     
     fn next(&mut self) -> Option<Entry> {
-        if let Some(k) = self.key_ptr() {
-            match unsafe {bpf_get_next_key(self.fd.expect("oh no"), k, k) } {
+        if let Some((k, l)) = self.key_ptr() {
+            let fd = self.fd.expect("oh no");
+            match unsafe {bpf_get_next_key(fd, k, k) } {
                 -1 => None,
-                _ => self.entry()
+                _ => {
+                    unsafe {bpf_lookup_elem(fd, k, l)};
+                    self.entry()
+                }
+
             }
         } else {
             Some(self.start())
