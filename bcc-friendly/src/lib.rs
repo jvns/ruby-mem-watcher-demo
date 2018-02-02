@@ -8,3 +8,4 @@ extern crate regex;
 pub mod core;
 pub mod symbol;
 pub mod perf;
+pub mod table;
