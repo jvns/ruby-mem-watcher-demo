@@ -1,11 +1,14 @@
 extern crate bcc_friendly;
+extern crate byteorder;
 extern crate libc;
 extern crate failure;
 extern crate ruby_fork_test;
+use byteorder::{NativeEndian, ReadBytesExt};
 use ruby_fork_test::*;
 use libc::*;
 use bcc_friendly::core::BCC;
 use failure::Error;
+
 
 use std::ffi::CString;
 
@@ -52,7 +55,8 @@ int count(struct pt_regs *ctx) {
                 Some(zero_pos) => String::from_utf8_lossy(&e.key[0..zero_pos]),
                 None => String::from_utf8_lossy(&e.key),
             };
-            println!("{:?} {:?}", key, e.value);
+            let value = e.value.read_u64::<BigEndian>().unwrap();
+            println!("{:?} {:?}", key, value);
         }
         println!("{}", i);
     }
