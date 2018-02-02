@@ -87,7 +87,7 @@ impl Iterator for EntryIter {
             return Some(e);
         }
         let k = self.key_ptr();
-        match bpf_get_next_key(self.fd.expect("oh no"), k, k) {
+        match unsafe {bpf_get_next_key(self.fd.expect("oh no"), k, k) } {
             -1 => None,
             _ => self.entry()
         }
