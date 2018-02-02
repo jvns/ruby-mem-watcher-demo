@@ -27,17 +27,18 @@ fn main() {
     let pid: pid_t = args[1].parse().unwrap();
     let table = &connect(pid).unwrap();
     let stuff = set_up_stuff(pid);
-    let rb_mod_name_addr = get_symbol_addr(&stuff.map, &stuff.elf_file, "rb_class2name").unwrap();
+    let rb_class2name_addr = get_symbol_addr(&stuff.map, &stuff.elf_file, "rb_class2name").unwrap();
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1000));
         let iter: table::EntryIter = table.into_iterz();
         for e in iter {
             let mut kcursor = Cursor::new(e.key);
             let ptr = kcursor.read_u64::<NativeEndian>().unwrap();
+            let name = get_class_name(&stuff, ptr, rb_class2name_addr as u64);
             let pid = kcursor.read_i32::<NativeEndian>().unwrap();
             let value = Cursor::new(e.value).read_u64::<NativeEndian>().unwrap();
-            if value > 10 {
-                println!("{:x} {:?} {:?}", ptr, pid, value);
+            if value > 100 {
+                println!("{:x} {:?} {:?} {:?}", ptr, name, pid, value);
             }
         }
     }
@@ -106,10 +107,10 @@ fn set_up_stuff(pid: pid_t) -> Stuff {
     }
 }
 
-fn get_class_name(stuff: &Stuff, ptr: u64, rb_mod_name_addr: u64) -> Option<String> {
+fn get_class_name(stuff: &Stuff, ptr: u64, rb_class2name_addr: u64) -> Option<String> {
     use std::io::Write;
     use std::io::Read;
-    let f = unsafe {std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_mod_name_addr as u64)};
+    let f = unsafe {std::mem::transmute::<u64, extern "C" fn (u64) -> u64>(rb_class2name_addr as u64)};
     if !maps_contain_addr(ptr as usize, &stuff.maps) {
         return None;
     }
@@ -130,7 +131,10 @@ fn get_class_name(stuff: &Stuff, ptr: u64, rb_mod_name_addr: u64) -> Option<Stri
         _ => {
             let mut status: c_int = 0;
             unsafe {libc::wait(&mut status)};
-            let mut f = File::open(filename).unwrap();
+            let mut f = match File::open(filename) {
+                Ok(x) => x,
+                _ => {return None;}
+            };
             let mut contents = String::new();
             f.read_to_string(&mut contents).unwrap();
             Some(contents)
