@@ -7,7 +7,7 @@ extern crate failure;
 
 use read_process_memory::*;
 use libc::*;
-use failure::Error;
+use failure::{Error, ResultExt};
 
 extern crate ruby_fork_test;
 use ruby_fork_test::*;
@@ -35,15 +35,13 @@ fn set_up_stuff(pid: pid_t) -> Stuff {
         if path.is_some() && (path.unwrap().contains("syscall") | path.unwrap().contains("vvar")) {
             continue;
         }
-        if map.flags == "rw-p" {
-            copy_map(&map, &source, PROT_READ | PROT_WRITE).unwrap();
-        }
-        if map.flags == "r--p" {
-            copy_map(&map, &source, PROT_READ | PROT_WRITE).unwrap();
-        }
-        if map.flags == "r-xp" {
-            copy_map(&map, &source, PROT_READ | PROT_WRITE | PROT_EXEC).unwrap();
-        }
+        let prot = match &map.flags[..] {
+            "rw-p" => PROT_READ | PROT_WRITE,
+            "r--p" => PROT_READ,
+            "r-xp" => PROT_READ | PROT_EXEC,
+            _ => continue,
+        };
+        copy_map(&map, &source, prot).unwrap();
     }
 
     let map = get_map(&maps, "bin/ruby", "r-xp").unwrap();
@@ -111,19 +109,20 @@ fn copy_map(map: &MapRange, source: &ProcessHandle, perms: i32) -> Result<(), Er
     let start = map.range_start;
     let length = map.range_end - map.range_start;
     unsafe {
-        let vec = copy_address(start, length, source);
-        if !vec.is_ok() {
-            return Err(format_err!("failed to copy map: {:?}", map));
-        }
-        let vec = vec.unwrap();
-        let ptr = mmap(start as * mut c_void, length, perms, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+        // Always include PROT_WRITE, so we can copy into it
+        let ptr = mmap(start as *mut c_void, length, perms | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
         if ptr == MAP_FAILED {
-            return Err(format_err!("failed to copy map: {:?}", map));
+            return Err(format_err!("failed to create map: {:?}", map));
         }
-        let slice = std::slice::from_raw_parts_mut(start as * mut u8, length);
-        slice.copy_from_slice(&vec);
-        if perms & PROT_EXEC != 0 {
-            libc::mprotect(start as *mut c_void, length, PROT_READ | PROT_EXEC);
+        if ptr != start as *mut c_void {
+            munmap(ptr, length);
+            return Err(format_err!("Failed to mmap to location {:#x}", start));
+        }
+        let slice = std::slice::from_raw_parts_mut(ptr as *mut u8, length);
+        source.copy_address(start, slice).context("unable to copy address")?;
+        // if PROT_WRITE wasn't originally set, clear it now
+        if perms & PROT_WRITE == 0 {
+            libc::mprotect(ptr, length, perms);
         }
         Ok(())
     }
