@@ -1,6 +1,6 @@
 extern crate read_process_memory;
 extern crate elf;
-extern crate bcc_friendly;
+extern crate bcc;
 extern crate byteorder;
 extern crate libc;
 #[macro_use]
@@ -8,9 +8,9 @@ extern crate failure;
 
 use std::collections::HashMap;
 use byteorder::{NativeEndian, ReadBytesExt};
-use bcc_friendly::core::BPF;
-use bcc_friendly::table::Table;
-use bcc_friendly::table;
+use bcc::core::BPF;
+use bcc::table::Table;
+use bcc::table;
 use failure::Error;
 use std::io::Cursor;
 use std::fs::File;
@@ -32,14 +32,17 @@ fn main() {
     let elf_struct = set_up_elf_struct(pid);
     let rb_class2name_addr = get_symbol_addr(&elf_struct.map, &elf_struct.elf_file, "rb_class2name").unwrap();
     let mut cache: HashMap<u64, Option<String>> = HashMap::new();
+    let mut prev = 0;
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1000));
-        let iter: table::EntryIter = table.into_iterz();
+        let iter: table::EntryIter = table.into_iter();
         let mut blah: Vec<(u64, Option<String>)> = vec!();
+        let mut total = 0;
         for e in iter {
             let mut kcursor = Cursor::new(e.key);
             let ptr = kcursor.read_u64::<NativeEndian>().unwrap();
             let value = Cursor::new(e.value).read_u64::<NativeEndian>().unwrap();
+            total += value;
             if value > 50 {
                 let name = cache.entry(ptr).or_insert_with(|| get_class_name(&elf_struct, ptr, rb_class2name_addr as u64));
                 blah.push((value, name.clone()));
@@ -53,6 +56,9 @@ fn main() {
             };
             println!("{name:>20} {value:?}", name=n, value=value);
         }
+        println!("Total allocations: {}", total);
+        println!("Allocations this second: {}", total - prev);
+        prev = total;
         print!("{}[2J", 27 as char);
     }
 }
@@ -85,8 +91,8 @@ int count(struct pt_regs *ctx) {
 };
     ";
     let mut module = BPF::new(code)?;
-    let uprobe = module.load_uprobe("count".to_string())?;
-    module.attach_uprobe(format!("/proc/{}/exe", pid), "newobj_slowpath".to_string(), uprobe, pid)?;
+    let uprobe = module.load_uprobe("count")?;
+    module.attach_uprobe(&format!("/proc/{}/exe", pid), "newobj_slowpath", uprobe, pid)?;
     Ok(module.table("counts"))
 }
 
@@ -133,7 +139,7 @@ fn get_class_name(elf_struct: &ElfStruct, ptr: u64, rb_class2name_addr: u64) -> 
             let name = std::string::String::from_utf8_lossy(s);
             let name = name.trim_right_matches("\0");
             let mut f = File::create(filename).unwrap();
-            write!(f, "{}", name);
+            write!(f, "{}", name).unwrap();
             std::process::exit(0);
         },
         -1 => panic!("oh no"),
@@ -230,8 +236,6 @@ fn elf_load_header(elf_file: &elf::File) -> elf::types::ProgramHeader {
         .clone()
 }
 
-
-
 pub fn copy_address_raw<T>(
     addr: usize,
     length: usize,
@@ -244,6 +248,3 @@ T: CopyAddress,
     source.copy_address(addr as usize, &mut copy).unwrap();
     copy
 }
-
-
-

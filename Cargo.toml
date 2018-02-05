@@ -12,5 +12,5 @@ path = "src/lib.rs"
 "libc" = "0.2.36"
 "elf" = "0.0.10"
 "failure" = "0.1.1"
-bcc-friendly = { path = "bcc-friendly" }
+bcc = { git = "https://github.com/jvns/rust-bcc" , rev = "f15d2983ddbe349aac3d2fcaeacf924a66db4be7" }
 byteorder = "1"
